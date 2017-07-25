@@ -2182,6 +2182,15 @@ config FB_XILINX
 	  framebuffer. ML300 carries a 640*480 LCD display on the board,
 	  ML403 uses a standard DB15 VGA connector.
 
+config FB_GSLCD
+	tristate "Gameslab frame buffer support"
+	depends on FB
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	---help---
+	  Include support for the Gameslab 800x480 LCD
+
 config FB_GOLDFISH
 	tristate "Goldfish Framebuffer"
 	depends on FB && HAS_DMA && (GOLDFISH || COMPILE_TEST)
