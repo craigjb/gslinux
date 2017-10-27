@@ -82,6 +82,11 @@ struct silead_ts_data {
 	struct input_mt_pos pos[SILEAD_MAX_FINGERS];
 	int slots[SILEAD_MAX_FINGERS];
 	int id[SILEAD_MAX_FINGERS];
+    bool callibrated;
+    u32 call_off_x;
+    u32 call_scale_x;
+    u32 call_off_y;
+    u32 call_scale_y;
 };
 
 struct silead_fw_data {
@@ -170,6 +175,12 @@ static void silead_ts_read_data(struct i2c_client *client)
 	for (i = 0; i < touch_nr; i++) {
 		input_mt_slot(input, data->slots[i]);
 		input_mt_report_slot_state(input, MT_TOOL_FINGER, true);
+
+        if (data->callibrated) {
+            data->pos[i].x = ((data->pos[i].x - data->call_off_x) * data->call_scale_x) >> 16;
+            data->pos[i].y = ((data->pos[i].y - data->call_off_y) * data->call_scale_y) >> 16;
+        }
+
 		input_report_abs(input, ABS_MT_POSITION_X, data->pos[i].x);
 		input_report_abs(input, ABS_MT_POSITION_Y, data->pos[i].y);
 
@@ -383,6 +394,12 @@ static void silead_ts_read_props(struct i2c_client *client)
 	struct silead_ts_data *data = i2c_get_clientdata(client);
 	struct device *dev = &client->dev;
 	const char *str;
+    u32 size_x = 0;
+    u32 size_y = 0;
+    u32 call_min_x = 0;
+    u32 call_max_x = 0;
+    u32 call_min_y = 0;
+    u32 call_max_y = 0;
 	int error;
 
 	error = device_property_read_u32(dev, "silead,max-fingers",
@@ -398,6 +415,65 @@ static void silead_ts_read_props(struct i2c_client *client)
 			 "silead/%s", str);
 	else
 		dev_dbg(dev, "Firmware file name read error. Using default.");
+
+    data->callibrated = true;
+
+    error = device_property_read_u32(dev, "touchscreen-size-x",
+					 &size_x);
+	if (error) {
+		dev_dbg(dev, "Size X read error %d\n", error);
+        data->callibrated = false;
+	}
+
+    error = device_property_read_u32(dev, "touchscreen-size-y",
+					 &size_y);
+	if (error) {
+		dev_dbg(dev, "Size Y read error %d\n", error);
+        data->callibrated = false;
+	}
+
+    error = device_property_read_u32(dev, "silead,callibrated-min-x",
+					 &call_min_x);
+	if (error) {
+		dev_dbg(dev, "Callibration min X read error %d\n", error);
+        data->callibrated = false;
+	} else {
+        data->callibrated = data->callibrated && true;
+    }
+
+    error = device_property_read_u32(dev, "silead,callibrated-max-x",
+					 &call_max_x);
+	if (error) {
+		dev_dbg(dev, "Callibration max X read error %d\n", error);
+        data->callibrated = false;
+	} else {
+        data->callibrated = data->callibrated && true;
+    }
+
+    error = device_property_read_u32(dev, "silead,callibrated-min-y",
+					 &call_min_y);
+	if (error) {
+		dev_dbg(dev, "Callibration min Y read error %d\n", error);
+        data->callibrated = false;
+	} else {
+        data->callibrated = data->callibrated && true;
+    }
+
+    error = device_property_read_u32(dev, "silead,callibrated-max-y",
+					 &call_max_y);
+	if (error) {
+		dev_dbg(dev, "Callibration max Y read error %d\n", error);
+        data->callibrated = false;
+	} else {
+        data->callibrated = data->callibrated && true;
+    }
+
+    if (data->callibrated) {
+        data->call_off_x = call_min_x;
+        data->call_scale_x = (size_x << 16) / (call_max_x - call_min_x);
+        data->call_off_y = call_min_y;
+        data->call_scale_y = (size_y << 16) / (call_max_y - call_min_y);
+    }
 }
 
 #ifdef CONFIG_ACPI
@@ -471,8 +547,10 @@ static int silead_ts_probe(struct i2c_client *client,
 	silead_ts_read_props(client);
 
 	/* We must have the IRQ provided by DT or ACPI subsytem */
-	if (client->irq <= 0)
+	if (client->irq <= 0) {
+        dev_err(dev, "No interrupts specified\n");
 		return -ENODEV;
+    }
 
 	data->regulators[0].supply = "vddio";
 	data->regulators[1].supply = "avdd";
