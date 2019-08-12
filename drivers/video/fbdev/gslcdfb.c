@@ -230,7 +230,7 @@ static int gslcdfb_assign(struct platform_device *pdev,
 		drvdata->fb_virt = ioremap(pdata->fb_phys, fbsize);
 	} else {
 		drvdata->fb_alloced = 1;
-		drvdata->fb_virt = dma_alloc_coherent(dev, PAGE_ALIGN(fbsize),
+		drvdata->fb_virt = dma_alloc_writecombine(dev, PAGE_ALIGN(fbsize),
 					&drvdata->fb_phys, GFP_KERNEL);
 	}
 
@@ -297,7 +297,7 @@ err_regfb:
 
 err_cmap:
 	if (drvdata->fb_alloced)
-		dma_free_coherent(dev, PAGE_ALIGN(fbsize), drvdata->fb_virt,
+		dma_free_writecombine(dev, PAGE_ALIGN(fbsize), drvdata->fb_virt,
 			drvdata->fb_phys);
 	else
 		iounmap(drvdata->fb_virt);
